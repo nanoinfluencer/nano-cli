@@ -1,0 +1,8 @@
+docs/
+.DS_Store
+dist/
+bin/
+nanoinf
+*.exe
+*.test
+coverage.out
