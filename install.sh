@@ -27,9 +27,8 @@ esac
 
 if [ "$VERSION" = "latest" ]; then
   VERSION="$(
-    curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-      | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
-      | head -n 1
+    curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" \
+      | sed -n 's#.*/tag/\([^/]*\)$#\1#p'
   )"
   if [ -z "$VERSION" ]; then
     echo "failed to resolve latest release tag for $REPO" >&2
@@ -38,7 +37,8 @@ if [ "$VERSION" = "latest" ]; then
 fi
 
 release_url="https://github.com/$REPO/releases/download/$VERSION"
-archive="nanoinf_${VERSION}_${os}_${arch}.tar.gz"
+version_no_v="${VERSION#v}"
+archive="nanoinf_${version_no_v}_${os}_${arch}.tar.gz"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
