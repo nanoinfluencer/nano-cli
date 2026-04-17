@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/nanoinfluencer/nano-cli/internal/config"
 )
 
 type SearchResponse struct {
@@ -46,10 +44,6 @@ type SearchCursor struct {
 }
 
 func (c *Client) SearchSimilar(ctx context.Context, platform, channelID string, filters map[string]interface{}, cursor *SearchCursor, excludeCIDs []string) (SearchResponse, error) {
-	if c.token == "" {
-		return SearchResponse{}, config.ErrTokenNotConfigured
-	}
-
 	payload := map[string]interface{}{
 		"cid": channelID,
 	}
@@ -74,11 +68,10 @@ func (c *Client) SearchSimilar(ctx context.Context, platform, channelID string, 
 		return SearchResponse{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/search/%s", c.baseURL, platform), bytes.NewReader(body))
+	req, err := c.newRequest(ctx, "POST", fmt.Sprintf("%s/api/search/%s", c.baseURL, platform), bytes.NewReader(body), true)
 	if err != nil {
 		return SearchResponse{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -109,11 +102,7 @@ func (c *Client) taskBaseURL() string {
 }
 
 func (c *Client) GetTask(ctx context.Context, taskID string) (TaskResponse, error) {
-	if c.token == "" {
-		return TaskResponse{}, config.ErrTokenNotConfigured
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/nano-api/search/task/%s", c.taskBaseURL(), taskID), bytes.NewReader([]byte(`{"channelIds":[]}`)))
+	req, err := c.newRequest(ctx, "POST", fmt.Sprintf("%s/nano-api/search/task/%s", c.taskBaseURL(), taskID), bytes.NewReader([]byte(`{"channelIds":[]}`)), false)
 	if err != nil {
 		return TaskResponse{}, err
 	}

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/nanoinfluencer/nano-cli/internal/config"
 )
 
 type ContactResponse struct {
@@ -17,15 +15,10 @@ type ContactResponse struct {
 }
 
 func (c *Client) GetContact(ctx context.Context, platform, id string) ([]map[string]interface{}, error) {
-	if c.token == "" {
-		return nil, config.ErrTokenNotConfigured
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/contact/%s/%s", c.baseURL, platform, id), nil)
+	req, err := c.newRequest(ctx, "GET", fmt.Sprintf("%s/api/contact/%s/%s", c.baseURL, platform, id), nil, true)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

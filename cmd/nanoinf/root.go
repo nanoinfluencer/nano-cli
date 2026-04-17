@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ func NewRootCommandWithDeps(deps Dependencies) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newAuthCommand())
+	cmd.AddCommand(newAuthCommand(deps))
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newWhoAmICommand(deps))
 	cmd.AddCommand(newSimilarCommand(deps))
@@ -57,24 +58,54 @@ func NewRootCommandWithDeps(deps Dependencies) *cobra.Command {
 	return cmd
 }
 
+func loadClientConfig() (config.Config, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, err
+	}
+	changed, err := config.EnsureDeviceID(&cfg)
+	if err != nil {
+		return config.Config{}, err
+	}
+	if changed {
+		if err := config.Save(cfg); err != nil {
+			return config.Config{}, err
+		}
+	}
+	return cfg, nil
+}
+
+func newAPIClient(cmd *cobra.Command, deps Dependencies, cfg config.Config) *api.Client {
+	version := cmd.Root().Version
+	if version == "" {
+		version = "dev"
+	}
+	return api.NewClient(cfg, deps.HTTPClient, api.ClientMeta{
+		Version:  version,
+		AppID:    "nanoinf-cli",
+		Platform: runtime.GOOS,
+		DeviceID: cfg.DeviceID,
+	})
+}
+
 func writeJSON(cmd *cobra.Command, v interface{}) error {
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
 
-func newAuthCommand() *cobra.Command {
+func newAuthCommand(deps Dependencies) *cobra.Command {
 	authCmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage authentication",
 		Long:  "Manage the access token used by nanoinf to call NanoInfluencer APIs.",
 	}
-	authCmd.AddCommand(newAuthTokenCommand())
+	authCmd.AddCommand(newAuthTokenCommand(deps))
 	authCmd.AddCommand(newAuthStatusCommand())
 	return authCmd
 }
 
-func newAuthTokenCommand() *cobra.Command {
+func newAuthTokenCommand(deps Dependencies) *cobra.Command {
 	tokenCmd := &cobra.Command{
 		Use:   "token",
 		Short: "Manage access token",
@@ -87,11 +118,16 @@ func newAuthTokenCommand() *cobra.Command {
 		Example: `  nanoinf auth token set <token>`,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			cfg, err := loadClientConfig()
 			if err != nil {
 				return err
 			}
+
 			cfg.Token = args[0]
+			client := newAPIClient(cmd, deps, cfg)
+			if _, err := client.WhoAmI(cmd.Context()); err != nil {
+				return fmt.Errorf("invalid CLI token: %w", err)
+			}
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
@@ -117,7 +153,7 @@ func newAuthStatusCommand() *cobra.Command {
 		Short:   "Show auth status",
 		Example: `  nanoinf auth status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			cfg, err := loadClientConfig()
 			if err != nil {
 				return err
 			}
@@ -130,6 +166,7 @@ func newAuthStatusCommand() *cobra.Command {
 				"configured":    cfg.Token != "",
 				"base_url":      cfg.BaseURL,
 				"config_path":   path,
+				"device_id":     cfg.DeviceID,
 				"token_preview": config.PreviewToken(cfg.Token),
 			})
 		},
@@ -149,7 +186,7 @@ func newConfigCommand() *cobra.Command {
 		Example: `  nanoinf config show`,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			cfg, err := loadClientConfig()
 			if err != nil {
 				return err
 			}
@@ -161,6 +198,7 @@ func newConfigCommand() *cobra.Command {
 			return writeJSON(cmd, map[string]interface{}{
 				"base_url":      cfg.BaseURL,
 				"config_path":   path,
+				"device_id":     cfg.DeviceID,
 				"has_token":     cfg.Token != "",
 				"token_preview": config.PreviewToken(cfg.Token),
 			})
@@ -177,12 +215,12 @@ func newWhoAmICommand(deps Dependencies) *cobra.Command {
 		Long:    "Call the NanoInfluencer user endpoint with the configured bearer token and show the current user profile.",
 		Example: `  nanoinf whoami`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			cfg, err := loadClientConfig()
 			if err != nil {
 				return err
 			}
 
-			client := api.NewClient(cfg, deps.HTTPClient)
+			client := newAPIClient(cmd, deps, cfg)
 			resp, err := client.WhoAmI(cmd.Context())
 			if err != nil {
 				if err == config.ErrTokenNotConfigured {
@@ -193,7 +231,8 @@ func newWhoAmICommand(deps Dependencies) *cobra.Command {
 
 			return writeJSON(cmd, map[string]interface{}{
 				"user":      resp.User,
-				"has_token": resp.Token != "",
+				"cli":       resp.CLI,
+				"has_token": cfg.Token != "",
 				"base_url":  cfg.BaseURL,
 			})
 		},
@@ -279,12 +318,12 @@ func Execute() error {
 }
 
 func runResolveURL(cmd *cobra.Command, deps Dependencies, inputURL string) error {
-	cfg, err := config.Load()
+	cfg, err := loadClientConfig()
 	if err != nil {
 		return err
 	}
 
-	client := api.NewClient(cfg, deps.HTTPClient)
+	client := newAPIClient(cmd, deps, cfg)
 	resolved, err := client.ResolveURL(cmd.Context(), inputURL)
 	if err != nil {
 		return err
@@ -346,12 +385,12 @@ type similarOptions struct {
 }
 
 func runSimilar(cmd *cobra.Command, deps Dependencies, opts similarOptions) error {
-	cfg, err := config.Load()
+	cfg, err := loadClientConfig()
 	if err != nil {
 		return err
 	}
 
-	client := api.NewClient(cfg, deps.HTTPClient)
+	client := newAPIClient(cmd, deps, cfg)
 	resolved, err := client.ResolveURL(cmd.Context(), opts.InputURL)
 	if err != nil {
 		return err
@@ -751,12 +790,12 @@ func runContactGet(cmd *cobra.Command, deps Dependencies, platform, id string) e
 		})
 	}
 
-	cfg, err := config.Load()
+	cfg, err := loadClientConfig()
 	if err != nil {
 		return err
 	}
 
-	client := api.NewClient(cfg, deps.HTTPClient)
+	client := newAPIClient(cmd, deps, cfg)
 	emails, err := client.GetContact(cmd.Context(), platform, id)
 	if err != nil {
 		if err == config.ErrTokenNotConfigured {
@@ -800,7 +839,7 @@ func runContactFill(cmd *cobra.Command, deps Dependencies, limit int) error {
 			continue
 		}
 		processed++
-		if ok, err := enrichContact(cmd.Context(), deps, &st, channel); err != nil {
+		if ok, err := enrichContact(cmd, cmd.Context(), deps, &st, channel); err != nil {
 			if err == config.ErrTokenNotConfigured {
 				return fmt.Errorf("%w: run `nanoinf auth token set <token>` first", err)
 			}
@@ -822,17 +861,17 @@ func runContactFill(cmd *cobra.Command, deps Dependencies, limit int) error {
 	})
 }
 
-func enrichContact(ctx context.Context, deps Dependencies, st *state.State, channel state.Channel) (bool, error) {
+func enrichContact(cmd *cobra.Command, ctx context.Context, deps Dependencies, st *state.State, channel state.Channel) (bool, error) {
 	if hasUsableContact(channel.Email) {
 		return false, nil
 	}
 
-	cfg, err := config.Load()
+	cfg, err := loadClientConfig()
 	if err != nil {
 		return false, err
 	}
 
-	client := api.NewClient(cfg, deps.HTTPClient)
+	client := newAPIClient(cmd, deps, cfg)
 	emails, err := client.GetContact(ctx, channel.Platform, channel.ID)
 	if err != nil {
 		return false, err
@@ -987,12 +1026,12 @@ func runFlagAdd(cmd *cobra.Command, deps Dependencies, flagType, platform, id, p
 		return fmt.Errorf("channel not found in local workspace")
 	}
 
-	cfg, err := config.Load()
+	cfg, err := loadClientConfig()
 	if err != nil {
 		return err
 	}
 
-	client := api.NewClient(cfg, deps.HTTPClient)
+	client := newAPIClient(cmd, deps, cfg)
 	flagged := map[string]interface{}{
 		"id":       channel.ID,
 		"platform": channel.Platform,
@@ -1071,7 +1110,7 @@ func runFavoriteFill(cmd *cobra.Command, deps Dependencies, project string, limi
 			continue
 		}
 		processed++
-		if ok, err := applyFlag(cmd.Context(), deps, &st, "fav", channel, project); err != nil {
+		if ok, err := applyFlag(cmd, cmd.Context(), deps, &st, "fav", channel, project); err != nil {
 			if err == config.ErrTokenNotConfigured {
 				return fmt.Errorf("%w: run `nanoinf auth token set <token>` first", err)
 			}
@@ -1094,13 +1133,13 @@ func runFavoriteFill(cmd *cobra.Command, deps Dependencies, project string, limi
 	})
 }
 
-func applyFlag(ctx context.Context, deps Dependencies, st *state.State, flagType string, channel state.Channel, project string) (bool, error) {
-	cfg, err := config.Load()
+func applyFlag(cmd *cobra.Command, ctx context.Context, deps Dependencies, st *state.State, flagType string, channel state.Channel, project string) (bool, error) {
+	cfg, err := loadClientConfig()
 	if err != nil {
 		return false, err
 	}
 
-	client := api.NewClient(cfg, deps.HTTPClient)
+	client := newAPIClient(cmd, deps, cfg)
 	flagged := map[string]interface{}{
 		"id":       channel.ID,
 		"platform": channel.Platform,

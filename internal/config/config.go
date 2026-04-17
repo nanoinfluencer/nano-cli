@@ -1,7 +1,9 @@
 package config
 
 import (
+	"crypto/rand"
 	"encoding/json"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,8 +17,9 @@ const (
 var ErrTokenNotConfigured = errors.New("access token not configured")
 
 type Config struct {
-	BaseURL string `json:"base_url"`
-	Token   string `json:"token,omitempty"`
+	BaseURL  string `json:"base_url"`
+	Token    string `json:"token,omitempty"`
+	DeviceID string `json:"device_id,omitempty"`
 }
 
 func Default() Config {
@@ -95,4 +98,24 @@ func PreviewToken(token string) string {
 		return token
 	}
 	return token[:8] + "..." + token[len(token)-8:]
+}
+
+func GenerateDeviceID() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+func EnsureDeviceID(cfg *Config) (bool, error) {
+	if cfg.DeviceID != "" {
+		return false, nil
+	}
+	deviceID, err := GenerateDeviceID()
+	if err != nil {
+		return false, err
+	}
+	cfg.DeviceID = deviceID
+	return true, nil
 }

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/nanoinfluencer/nano-cli/internal/config"
 )
 
 type ResolveProfileResponse struct {
@@ -27,7 +25,7 @@ func (c *Client) ResolveURL(ctx context.Context, inputURL string) (ResolveProfil
 		return ResolveProfileResponse{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/profile", bytes.NewReader(payload))
+	req, err := c.newRequest(ctx, "POST", c.baseURL+"/api/profile", bytes.NewReader(payload), false)
 	if err != nil {
 		return ResolveProfileResponse{}, err
 	}
@@ -54,15 +52,10 @@ func (c *Client) ResolveURL(ctx context.Context, inputURL string) (ResolveProfil
 }
 
 func (c *Client) GetProfile(ctx context.Context, platform, id string) (map[string]interface{}, error) {
-	if c.token == "" {
-		return nil, config.ErrTokenNotConfigured
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/profile/%s/%s", c.baseURL, platform, id), nil)
+	req, err := c.newRequest(ctx, "GET", fmt.Sprintf("%s/api/profile/%s/%s", c.baseURL, platform, id), nil, true)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

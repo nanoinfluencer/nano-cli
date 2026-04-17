@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -21,7 +22,26 @@ func TestAuthTokenSetWritesConfig(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv(config.ConfigDirEnv, configDir)
 
-	stdout, stderr, err := execute(t, Dependencies{}, "auth", "token", "set", testToken)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/cli/whoami" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		assertCLIHeaders(t, r)
+		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
+			t.Fatalf("unexpected authorization header: %s", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"user":{"email":"leo.zhaojun@gmail.com","name":"Leo","image":""},"cli":{"enabled":true,"scope":"cli","client":"cli","version":"dev","appId":"nanoinf-cli","platform":"` + runtime.GOOS + `","deviceId":"device-123"}}`))
+	}))
+	defer server.Close()
+
+	if err := config.Save(config.Config{
+		BaseURL: server.URL,
+	}); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	stdout, stderr, err := execute(t, Dependencies{HTTPClient: server.Client()}, "auth", "token", "set", testToken)
 	if err != nil {
 		t.Fatalf("execute failed: %v, stderr=%s", err, stderr)
 	}
@@ -44,8 +64,11 @@ func TestAuthTokenSetWritesConfig(t *testing.T) {
 	if cfg.Token != testToken {
 		t.Fatalf("expected token to be saved")
 	}
-	if cfg.BaseURL != config.DefaultBaseURL {
-		t.Fatalf("expected default base url, got %s", cfg.BaseURL)
+	if cfg.BaseURL != server.URL {
+		t.Fatalf("expected saved base url, got %s", cfg.BaseURL)
+	}
+	if cfg.DeviceID == "" {
+		t.Fatalf("expected device id to be saved")
 	}
 }
 
@@ -95,14 +118,15 @@ func TestWhoAmIUsesBearerToken(t *testing.T) {
 	t.Setenv(config.ConfigDirEnv, configDir)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/user" {
+		if r.URL.Path != "/api/cli/whoami" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
+		assertCLIHeaders(t, r)
 		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
 			t.Fatalf("unexpected authorization header: %s", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"user":{"email":"leo.zhaojun@gmail.com","name":"Leo","image":""},"token":"server-token"}`))
+		_, _ = w.Write([]byte(`{"ok":true,"user":{"email":"leo.zhaojun@gmail.com","name":"Leo","image":""},"cli":{"enabled":true,"scope":"cli","client":"cli","version":"dev","appId":"nanoinf-cli","platform":"` + runtime.GOOS + `","deviceId":"device-123"}}`))
 	}))
 	defer server.Close()
 
@@ -139,6 +163,28 @@ func TestWhoAmIFailsWithoutToken(t *testing.T) {
 	}
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %s", stderr)
+	}
+}
+
+func assertCLIHeaders(t *testing.T, r *http.Request) {
+	t.Helper()
+	if got := r.Header.Get("X-NAINF-CLIENT"); got != "cli" {
+		t.Fatalf("unexpected cli header: %s", got)
+	}
+	if got := r.Header.Get("app-version"); got == "" {
+		t.Fatalf("missing app-version header")
+	}
+	if got := r.Header.Get("app-id"); got != "nanoinf-cli" {
+		t.Fatalf("unexpected app-id header: %s", got)
+	}
+	if got := r.Header.Get("app-platform"); got != runtime.GOOS {
+		t.Fatalf("unexpected app-platform header: %s", got)
+	}
+	if got := r.Header.Get("app-device-id"); got == "" {
+		t.Fatalf("missing app-device-id header")
+	}
+	if got := r.Header.Get("User-Agent"); !strings.Contains(got, "nanoinf/") {
+		t.Fatalf("unexpected user-agent header: %s", got)
 	}
 }
 

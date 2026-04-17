@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/nanoinfluencer/nano-cli/internal/config"
 )
 
 type FlagResponse struct {
@@ -19,20 +17,15 @@ type FlagResponse struct {
 }
 
 func (c *Client) SaveFlag(ctx context.Context, payload map[string]interface{}) (FlagResponse, error) {
-	if c.token == "" {
-		return FlagResponse{}, config.ErrTokenNotConfigured
-	}
-
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return FlagResponse{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/flag", bytes.NewReader(body))
+	req, err := c.newRequest(ctx, "POST", c.baseURL+"/api/flag", bytes.NewReader(body), true)
 	if err != nil {
 		return FlagResponse{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
