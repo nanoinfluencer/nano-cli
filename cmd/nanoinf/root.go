@@ -841,7 +841,7 @@ func runContactGet(cmd *cobra.Command, deps Dependencies, platform, id string) e
 
 	if hasUsableContact(channel.Email) {
 		return writeJSON(cmd, map[string]interface{}{
-			"channel":     channel,
+			"channel":     contactChannelSummary(channel),
 			"contact":     channel.Email,
 			"source":      "workspace",
 			"workspace":   true,
@@ -871,12 +871,39 @@ func runContactGet(cmd *cobra.Command, deps Dependencies, platform, id string) e
 	}
 
 	return writeJSON(cmd, map[string]interface{}{
-		"channel":     channel,
+		"channel":     contactChannelSummary(channel),
 		"contact":     channel.Email,
 		"source":      "api",
 		"workspace":   true,
 		"channel_key": key,
 	})
+}
+
+func contactChannelSummary(channel state.Channel) map[string]interface{} {
+	out := map[string]interface{}{
+		"id":         channel.ID,
+		"platform":   channel.Platform,
+		"updated_at": channel.UpdatedAt,
+	}
+	if channel.Name != "" {
+		out["name"] = channel.Name
+	}
+	if channel.Username != "" {
+		out["username"] = channel.Username
+	}
+	if channel.URL != "" {
+		out["url"] = channel.URL
+	}
+	if channel.Icon != "" {
+		out["icon"] = channel.Icon
+	}
+	if channel.Flag != "" {
+		out["flag"] = channel.Flag
+	}
+	if channel.ProjectID != "" {
+		out["project_id"] = channel.ProjectID
+	}
+	return out
 }
 
 func runContactFill(cmd *cobra.Command, deps Dependencies, limit int) error {

@@ -588,6 +588,11 @@ func TestContactGetUsesWorkspaceWhenContactExists(t *testing.T) {
 		Email: []map[string]interface{}{
 			{"type": "MATCHED", "value": "hello@example.com"},
 		},
+		Raw: map[string]interface{}{
+			"recentPosts": []interface{}{
+				map[string]interface{}{"title": "large cached payload"},
+			},
+		},
 	})
 	if err := state.Save(st); err != nil {
 		t.Fatalf("save state: %v", err)
@@ -602,6 +607,9 @@ func TestContactGetUsesWorkspaceWhenContactExists(t *testing.T) {
 	}
 	if !strings.Contains(stdout, `hello@example.com`) {
 		t.Fatalf("expected local email in output, got %s", stdout)
+	}
+	if strings.Contains(stdout, "recentPosts") || strings.Contains(stdout, "large cached payload") {
+		t.Fatalf("expected compact contact output without raw payload, got %s", stdout)
 	}
 }
 
