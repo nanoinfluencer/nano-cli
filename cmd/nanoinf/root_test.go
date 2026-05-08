@@ -672,6 +672,51 @@ func TestContactGetFetchesAndMergesWhenWorkspaceHasNoValidContact(t *testing.T) 
 	}
 }
 
+func TestContactGetFetchesWithoutWorkspaceChannel(t *testing.T) {
+	configDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv(config.ConfigDirEnv, configDir)
+	t.Setenv(state.StateDirEnv, stateDir)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/contact/ins/missmeat" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
+			t.Fatalf("unexpected authorization header: %s", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"email":["hello@example.com"]}}`))
+	}))
+	defer server.Close()
+
+	if err := config.Save(config.Config{BaseURL: server.URL, Token: testToken}); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	stdout, stderr, err := execute(t, Dependencies{HTTPClient: server.Client()}, "contact", "get", "--platform", "ins", "--id", "missmeat")
+	if err != nil {
+		t.Fatalf("execute failed: %v, stderr=%s", err, stderr)
+	}
+	if !strings.Contains(stdout, `"workspace": false`) {
+		t.Fatalf("expected non-workspace response, got %s", stdout)
+	}
+	if !strings.Contains(stdout, `"id": "missmeat"`) || !strings.Contains(stdout, `"platform": "ins"`) {
+		t.Fatalf("expected minimal channel identity, got %s", stdout)
+	}
+	if !strings.Contains(stdout, `hello@example.com`) {
+		t.Fatalf("expected fetched email in output, got %s", stdout)
+	}
+
+	updated, err := state.Load()
+	if err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	if _, ok := updated.Channels["ins:missmeat"]; ok {
+		t.Fatalf("expected contact lookup without workspace channel not to create channel state")
+	}
+}
+
 func TestContactFillEnrichesOnlyChannelsWithoutContact(t *testing.T) {
 	configDir := t.TempDir()
 	stateDir := t.TempDir()

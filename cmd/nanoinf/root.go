@@ -835,11 +835,8 @@ func runContactGet(cmd *cobra.Command, deps Dependencies, platform, id string) e
 
 	key := state.ChannelKey(platform, id)
 	channel, ok := st.Channels[key]
-	if !ok {
-		return fmt.Errorf("channel not found in local workspace")
-	}
 
-	if hasUsableContact(channel.Email) {
+	if ok && hasUsableContact(channel.Email) {
 		return writeJSON(cmd, map[string]interface{}{
 			"channel":     contactChannelSummary(channel),
 			"contact":     channel.Email,
@@ -861,6 +858,19 @@ func runContactGet(cmd *cobra.Command, deps Dependencies, platform, id string) e
 			return fmt.Errorf("%w: run `nanoinf auth token set <token>` first", err)
 		}
 		return err
+	}
+
+	if !ok {
+		return writeJSON(cmd, map[string]interface{}{
+			"channel": map[string]interface{}{
+				"id":       id,
+				"platform": platform,
+			},
+			"contact":     emails,
+			"source":      "api",
+			"workspace":   false,
+			"channel_key": key,
+		})
 	}
 
 	channel.Email = mergeEmails(channel.Email, emails)
