@@ -24,13 +24,15 @@ type Channel struct {
 }
 
 type LastSearch struct {
-	Kind      string `json:"kind,omitempty"`
-	InputURL  string `json:"input_url,omitempty"`
-	Platform  string `json:"platform,omitempty"`
-	ChannelID string `json:"channel_id,omitempty"`
-	NextToken string `json:"next_token,omitempty"`
+	Kind      string                 `json:"kind,omitempty"`
+	InputURL  string                 `json:"input_url,omitempty"`
+	Platform  string                 `json:"platform,omitempty"`
+	ChannelID string                 `json:"channel_id,omitempty"`
+	NextToken string                 `json:"next_token,omitempty"`
 	Filters   map[string]interface{} `json:"filters,omitempty"`
-	UpdatedAt int64  `json:"updated_at,omitempty"`
+	PosTags   []string               `json:"pos_tags,omitempty"`
+	NegTags   []string               `json:"neg_tags,omitempty"`
+	UpdatedAt int64                  `json:"updated_at,omitempty"`
 }
 
 type State struct {

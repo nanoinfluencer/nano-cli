@@ -250,22 +250,28 @@ func newSimilarCommand(deps Dependencies) *cobra.Command {
 	var postsRange string
 	var erRange string
 	var vrRange string
+	var posTags []string
+	var negTags []string
 
 	cmd := &cobra.Command{
 		Use:     "similar <url>",
 		Short:   "Find similar influencers from a seed URL",
 		Long:    "Resolve a creator URL, run a similar-influencer search, store the returned channels in local workspace state, and return an optional next token for pagination.",
-		Example: "  nanoinf similar https://www.youtube.com/@theAIsearch\n  nanoinf similar https://www.youtube.com/@theAIsearch --has-email --country US --country GB --active-within 30 --subs 10000:200000\n  nanoinf similar https://www.youtube.com/@theAIsearch --next <token>",
+		Example: "  nanoinf similar https://www.youtube.com/@theAIsearch\n  nanoinf similar https://www.youtube.com/@theAIsearch --has-email --country US --country GB --active-within 30 --subs 10000:200000\n  nanoinf similar https://www.youtube.com/@theAIsearch --pos-tag \"board games\" --neg-tag \"video games, gameplay\"\n  nanoinf similar https://www.youtube.com/@theAIsearch --next <token>",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filters, err := buildSearchFilters(hasEmail, countries, excludeCountries, activeWithin, subsRange, viewsRange, postsRange, erRange, vrRange)
 			if err != nil {
 				return err
 			}
+			parsedPosTags := parseTags(posTags)
+			parsedNegTags := parseTags(negTags)
 			return runSimilar(cmd, deps, similarOptions{
 				InputURL:  args[0],
 				NextToken: nextToken,
 				Filters:   filters,
+				PosTags:   parsedPosTags,
+				NegTags:   parsedNegTags,
 			})
 		},
 	}
@@ -280,6 +286,8 @@ func newSimilarCommand(deps Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&postsRange, "posts", "", "Post count range as min:max")
 	cmd.Flags().StringVar(&erRange, "er", "", "Engagement rate percentage range as min:max")
 	cmd.Flags().StringVar(&vrRange, "vr", "", "View rate percentage range as min:max")
+	cmd.Flags().StringArrayVar(&posTags, "pos-tag", nil, "Positive topic/tag to look for, repeatable or comma-separated")
+	cmd.Flags().StringArrayVar(&negTags, "neg-tag", nil, "Negative topic/tag to avoid, repeatable or comma-separated")
 	return cmd
 }
 
@@ -305,6 +313,8 @@ func newNextCommand(deps Dependencies) *cobra.Command {
 				InputURL:  st.LastSearch.InputURL,
 				NextToken: st.LastSearch.NextToken,
 				Filters:   st.LastSearch.Filters,
+				PosTags:   st.LastSearch.PosTags,
+				NegTags:   st.LastSearch.NegTags,
 			})
 		},
 	}
@@ -382,6 +392,8 @@ type similarOptions struct {
 	InputURL  string
 	NextToken string
 	Filters   map[string]interface{}
+	PosTags   []string
+	NegTags   []string
 }
 
 func runSimilar(cmd *cobra.Command, deps Dependencies, opts similarOptions) error {
@@ -406,7 +418,10 @@ func runSimilar(cmd *cobra.Command, deps Dependencies, opts similarOptions) erro
 		return err
 	}
 
-	searchResp, err := client.SearchSimilar(cmd.Context(), resolved.Platform, resolved.ID, opts.Filters, cursor, excludeCIDs(st, resolved.Platform))
+	searchResp, err := client.SearchSimilar(cmd.Context(), resolved.Platform, resolved.ID, opts.Filters, api.SearchTags{
+		PosTags: opts.PosTags,
+		NegTags: opts.NegTags,
+	}, cursor, excludeCIDs(st, resolved.Platform))
 	if err != nil {
 		if err == config.ErrTokenNotConfigured {
 			return fmt.Errorf("%w: run `nanoinf auth token set <token>` first", err)
@@ -464,6 +479,8 @@ func runSimilar(cmd *cobra.Command, deps Dependencies, opts similarOptions) erro
 		ChannelID: resolved.ID,
 		NextToken: encodedNext,
 		Filters:   cloneMap(opts.Filters),
+		PosTags:   cloneStringSlice(opts.PosTags),
+		NegTags:   cloneStringSlice(opts.NegTags),
 		UpdatedAt: time.Now().Unix(),
 	}
 	if err := state.Save(st); err != nil {
@@ -479,8 +496,41 @@ func runSimilar(cmd *cobra.Command, deps Dependencies, opts similarOptions) erro
 		"task_id":    searchResp.Data.JobID,
 		"channels":   channels,
 		"filters":    opts.Filters,
+		"pos_tags":   opts.PosTags,
+		"neg_tags":   opts.NegTags,
 		"next_token": encodedNext,
 	})
+}
+
+func parseTags(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, raw := range values {
+		for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == '\n'
+		}) {
+			tag := strings.TrimSpace(item)
+			if tag == "" {
+				continue
+			}
+			key := strings.ToLower(tag)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, tag)
+			if len(out) >= 20 {
+				return out
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func buildSearchFilters(hasEmail bool, countries, excludeCountries []string, activeWithin int, subsRange, viewsRange, postsRange, erRange, vrRange string) (map[string]interface{}, error) {
@@ -582,6 +632,15 @@ func cloneMap(v map[string]interface{}) map[string]interface{} {
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil
 	}
+	return out
+}
+
+func cloneStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, len(values))
+	copy(out, values)
 	return out
 }
 

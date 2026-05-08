@@ -88,6 +88,8 @@ nanoinf hide add --platform ytb --id UCIgnGlGkVRhd4qNFcEwLL4A --project 12
 - `--posts 10:500`
 - `--er 2:20`
 - `--vr 5:50`
+- `--pos-tag "board games"` (repeatable or comma-separated)
+- `--neg-tag "video games"` (repeatable or comma-separated)
 
 Example:
 
@@ -97,7 +99,9 @@ nanoinf similar https://www.youtube.com/@theAIsearch \
   --country US \
   --country GB \
   --active-within 30 \
-  --subs 10000:200000
+  --subs 10000:200000 \
+  --pos-tag "board games, party games" \
+  --neg-tag "video games, gameplay"
 ```
 
 ## Output Contract

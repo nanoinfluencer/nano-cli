@@ -317,6 +317,8 @@ func TestSimilarCommandWritesChannelsAndReturnsNextToken(t *testing.T) {
 			assertFloatArray(t, filters["posts"], []float64{10, 500})
 			assertFloatArray(t, filters["er"], []float64{2, 20})
 			assertFloatArray(t, filters["vr"], []float64{5, 50})
+			assertStringArray(t, body["posTags"], []string{"board games", "party games"})
+			assertStringArray(t, body["negTags"], []string{"video games", "gameplay"})
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"data":{"job_id":"job-123"},"message":"Success"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/nano-api/search/task/job-123":
@@ -350,6 +352,10 @@ func TestSimilarCommandWritesChannelsAndReturnsNextToken(t *testing.T) {
 		"--posts", "10:500",
 		"--er", "2:20",
 		"--vr", "5:50",
+		"--pos-tag", "board games, party games",
+		"--pos-tag", "board games",
+		"--neg-tag", "video games",
+		"--neg-tag", "gameplay",
 	)
 	if err != nil {
 		t.Fatalf("execute failed: %v, stderr=%s", err, stderr)
@@ -392,6 +398,12 @@ func TestSimilarCommandWritesChannelsAndReturnsNextToken(t *testing.T) {
 	}
 	assertFloatArray(t, st.LastSearch.Filters["country"], []float64{840, 826})
 	assertFloatArray(t, st.LastSearch.Filters["excludeCountry"], []float64{392})
+	if got := strings.Join(st.LastSearch.PosTags, "|"); got != "board games|party games" {
+		t.Fatalf("unexpected saved pos tags: %#v", st.LastSearch.PosTags)
+	}
+	if got := strings.Join(st.LastSearch.NegTags, "|"); got != "video games|gameplay" {
+		t.Fatalf("unexpected saved neg tags: %#v", st.LastSearch.NegTags)
+	}
 	if _, ok := st.Channels["ytb:UCaaa"]; !ok {
 		t.Fatalf("expected first channel in state")
 	}
@@ -489,6 +501,8 @@ func TestNextCommandUsesSavedLastSearch(t *testing.T) {
 				float64(200000),
 			},
 		},
+		PosTags: []string{"board games", "party games"},
+		NegTags: []string{"video games", "gameplay"},
 	}
 	if err := state.Save(st); err != nil {
 		t.Fatalf("save state: %v", err)
@@ -516,6 +530,8 @@ func TestNextCommandUsesSavedLastSearch(t *testing.T) {
 			}
 			assertFloatArray(t, filters["country"], []float64{840})
 			assertFloatArray(t, filters["subs"], []float64{10000, 200000})
+			assertStringArray(t, body["posTags"], []string{"board games", "party games"})
+			assertStringArray(t, body["negTags"], []string{"video games", "gameplay"})
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"data":{"job_id":"job-next"},"message":"Success"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/nano-api/search/task/job-next":
@@ -960,6 +976,23 @@ func assertFloatArray(t *testing.T, value interface{}, expected []float64) {
 	for i := range expected {
 		if got[i] != expected[i] {
 			t.Fatalf("unexpected array value at %d: got %#v want %#v", i, got, expected)
+		}
+	}
+}
+
+func assertStringArray(t *testing.T, value interface{}, expected []string) {
+	t.Helper()
+
+	got, ok := value.([]interface{})
+	if !ok {
+		t.Fatalf("expected string array payload, got %#v", value)
+	}
+	if len(got) != len(expected) {
+		t.Fatalf("unexpected string array length: got %#v want %#v", got, expected)
+	}
+	for i := range expected {
+		if got[i] != expected[i] {
+			t.Fatalf("unexpected string array value at %d: got %#v want %#v", i, got, expected)
 		}
 	}
 }

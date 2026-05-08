@@ -43,12 +43,23 @@ type SearchCursor struct {
 	NextIDs   interface{}
 }
 
-func (c *Client) SearchSimilar(ctx context.Context, platform, channelID string, filters map[string]interface{}, cursor *SearchCursor, excludeCIDs []string) (SearchResponse, error) {
+type SearchTags struct {
+	PosTags []string
+	NegTags []string
+}
+
+func (c *Client) SearchSimilar(ctx context.Context, platform, channelID string, filters map[string]interface{}, tags SearchTags, cursor *SearchCursor, excludeCIDs []string) (SearchResponse, error) {
 	payload := map[string]interface{}{
 		"cid": channelID,
 	}
 	if len(filters) > 0 {
 		payload["filters"] = filters
+	}
+	if len(tags.PosTags) > 0 {
+		payload["posTags"] = tags.PosTags
+	}
+	if len(tags.NegTags) > 0 {
+		payload["negTags"] = tags.NegTags
 	}
 	if cursor != nil {
 		if cursor.NextToken != "" {
