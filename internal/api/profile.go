@@ -38,7 +38,7 @@ func (c *Client) ResolveURL(ctx context.Context, inputURL string) (ResolveProfil
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return ResolveProfileResponse{}, fmt.Errorf("resolve request failed with status %d", resp.StatusCode)
+		return ResolveProfileResponse{}, responseError("resolve request", resp)
 	}
 
 	var data ResolveProfileResponse
@@ -64,7 +64,7 @@ func (c *Client) GetProfile(ctx context.Context, platform, id string) (map[strin
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("profile request failed with status %d", resp.StatusCode)
+		return nil, responseError("profile request", resp)
 	}
 
 	var data ProfileResponse

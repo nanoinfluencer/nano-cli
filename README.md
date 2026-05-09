@@ -67,6 +67,8 @@ nanoinf contact get --platform ytb --id UCIgnGlGkVRhd4qNFcEwLL4A
 nanoinf contact fill --limit 20
 ```
 
+`contact get` can fetch by platform and channel ID directly. If the channel already exists in the local workspace, the CLI also merges the contact result back into local state. `contact fill` enriches channels already saved in the local workspace.
+
 Save creators:
 
 ```bash

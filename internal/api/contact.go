@@ -27,7 +27,7 @@ func (c *Client) GetContact(ctx context.Context, platform, id string) ([]map[str
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("contact request failed with status %d", resp.StatusCode)
+		return nil, responseError("contact request", resp)
 	}
 
 	var data ContactResponse

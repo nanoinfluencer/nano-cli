@@ -15,5 +15,17 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
-      - run: go build ./...
+      - run: go build -o nanoinf .
+      - name: Smoke test CLI error output
+        run: |
+          set +e
+          tmp_config="$(mktemp -d)"
+          tmp_state="$(mktemp -d)"
+          NANOINF_CONFIG_DIR="$tmp_config" NANOINF_STATE_DIR="$tmp_state" ./nanoinf whoami >stdout.txt 2>stderr.txt
+          code="$?"
+          rm -rf "$tmp_config" "$tmp_state"
+          set -e
 
+          test "$code" -ne 0
+          test ! -s stdout.txt
+          grep -q "access token not configured" stderr.txt

@@ -92,7 +92,7 @@ func (c *Client) SearchSimilar(ctx context.Context, platform, channelID string, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return SearchResponse{}, fmt.Errorf("search request failed with status %d", resp.StatusCode)
+		return SearchResponse{}, responseError("search request", resp)
 	}
 
 	var data SearchResponse
@@ -126,7 +126,7 @@ func (c *Client) GetTask(ctx context.Context, taskID string) (TaskResponse, erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return TaskResponse{}, fmt.Errorf("task request failed with status %d", resp.StatusCode)
+		return TaskResponse{}, responseError("task request", resp)
 	}
 
 	var data TaskResponse

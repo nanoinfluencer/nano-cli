@@ -75,6 +75,31 @@ func (c *Client) newRequest(ctx context.Context, method string, url string, body
 	return req, nil
 }
 
+func responseError(action string, resp *http.Response) error {
+	status := fmt.Sprintf("%d", resp.StatusCode)
+	if text := http.StatusText(resp.StatusCode); text != "" {
+		status += " " + text
+	}
+
+	detail := ""
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if len(body) > 0 {
+		detail = strings.TrimSpace(string(body))
+	}
+
+	if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+		if detail != "" {
+			detail += "; "
+		}
+		detail += "retry after " + retryAfter
+	}
+
+	if detail != "" {
+		return fmt.Errorf("%s failed with status %s: %s", action, status, detail)
+	}
+	return fmt.Errorf("%s failed with status %s", action, status)
+}
+
 func (c *Client) WhoAmI(ctx context.Context) (WhoAmIResponse, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, c.baseURL+"/api/cli/whoami", nil, true)
 	if err != nil {
@@ -88,17 +113,7 @@ func (c *Client) WhoAmI(ctx context.Context) (WhoAmIResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		var apiErr struct {
-			Error string `json:"error"`
-			Code  string `json:"code"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Error != "" {
-			if apiErr.Code != "" {
-				return WhoAmIResponse{}, fmt.Errorf("%s (%s)", apiErr.Error, apiErr.Code)
-			}
-			return WhoAmIResponse{}, fmt.Errorf("%s", apiErr.Error)
-		}
-		return WhoAmIResponse{}, fmt.Errorf("request failed with status %d", resp.StatusCode)
+		return WhoAmIResponse{}, responseError("whoami request", resp)
 	}
 
 	var data WhoAmIResponse

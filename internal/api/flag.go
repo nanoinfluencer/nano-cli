@@ -35,7 +35,7 @@ func (c *Client) SaveFlag(ctx context.Context, payload map[string]interface{}) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return FlagResponse{}, fmt.Errorf("flag request failed with status %d", resp.StatusCode)
+		return FlagResponse{}, responseError("flag request", resp)
 	}
 
 	var data FlagResponse
